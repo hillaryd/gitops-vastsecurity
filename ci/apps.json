@@ -1,4 +1,4 @@
-[ 
+[
     {
       "url": "https://github.com/frappe/erpnext",
       "branch": "version-15"
@@ -27,7 +27,7 @@
       "url": "https://github.com/Commquest-Technologies/entropy.git",
       "branch": "main"
     },
-        {
+    {
       "url": "https://github.com/rtCamp/next-crm.git",
       "branch": "main"
     },

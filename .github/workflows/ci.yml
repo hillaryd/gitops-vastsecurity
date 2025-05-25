@@ -61,7 +61,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Generate version
+      - name: Generate version and cache key
         id: version
         run: |
           # Use timestamp + short commit hash for version
@@ -69,6 +69,11 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
           echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          
+          # Generate cache key based on apps.json content to invalidate cache when apps change
+          APPS_HASH=$(sha256sum ./ci/apps.json | cut -d ' ' -f 1)
+          echo "APPS_HASH=$APPS_HASH" >> $GITHUB_ENV
+          
           # Update version.txt for future reference
           echo "$VERSION" > ./ci/version.txt
           git config --global user.name "GitHub Actions"
@@ -105,14 +110,15 @@ jobs:
           tags: |
             ${{ inputs.registry || env.REGISTRY }}/${{ env.PROJECT_NAMESPACE || github.repository }}/${{ inputs.image || env.IMAGE }}:${{ inputs.version || env.VERSION }}
             ${{ inputs.registry || env.REGISTRY }}/${{ env.PROJECT_NAMESPACE || github.repository }}/${{ inputs.image || env.IMAGE }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ env.APPS_HASH }}
+          cache-to: type=gha,mode=max,scope=${{ env.APPS_HASH }}
           build-args: |
             "FRAPPE_PATH=${{ inputs.frappe-repo || env.FRAPPE_REPO }}"
             "FRAPPE_BRANCH=${{ inputs.frappe-version || env.FRAPPE_VERSION }}"
             "PYTHON_VERSION=${{ inputs.py-version || env.PY_VERSION }}"
             "NODE_VERSION=${{ inputs.nodejs-version || env.NODEJS_VERSION }}"
             "APPS_JSON_BASE64=${{ inputs.apps-json-base64 || env.APPS_JSON_BASE64 }}"
+            "CACHE_BUST=${{ env.BUILD_DATE }}"
           labels: |
             org.opencontainers.image.created=${{ env.BUILD_DATE }}
             org.opencontainers.image.revision=${{ env.COMMIT_SHA }}
