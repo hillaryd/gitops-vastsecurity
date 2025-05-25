@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'ci/**'
+      - '.github/workflows/ci.yml'
 
   workflow_dispatch:
     inputs:
@@ -49,25 +52,40 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      ### Comment start - when not using docker build actions
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      ### Comment end - when not using docker build actions
+
+      - name: Generate version
+        id: version
+        run: |
+          # Use timestamp + short commit hash for version
+          VERSION=$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
+          echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          # Update version.txt for future reference
+          echo "$VERSION" > ./ci/version.txt
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add ./ci/version.txt
+          git commit -m "Update version to $VERSION" || echo "No changes to commit"
+          git push || echo "No changes to push"
 
       - name: Source Build Env
         id: source-build-env
         run: |
           cat ./ci/build.env >> $GITHUB_ENV
           echo "" >> $GITHUB_ENV
-          echo "VERSION=$(cat ./ci/version.txt)" >> $GITHUB_ENV
           echo "APPS_JSON_BASE64=$(base64 -w 0 ./ci/apps.json)" >> $GITHUB_ENV
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ${{ inputs.registry || env.REGISTRY }}
           username: ${{ inputs.registry-user || github.actor }}
@@ -85,11 +103,17 @@ jobs:
           context: builds
           file: builds/${{ inputs.dockerfile || env.DOCKERFILE }}
           tags: |
-            ghcr.io/${{ env.PROJECT_NAMESPACE || github.repository }}/${{  env.IMAGE  ||  inputs.image }}:1.0.0
-            ghcr.io/${{ env.PROJECT_NAMESPACE || github.repository }}/${{ inputs.image || env.IMAGE }}:latest
+            ${{ inputs.registry || env.REGISTRY }}/${{ env.PROJECT_NAMESPACE || github.repository }}/${{ inputs.image || env.IMAGE }}:${{ inputs.version || env.VERSION }}
+            ${{ inputs.registry || env.REGISTRY }}/${{ env.PROJECT_NAMESPACE || github.repository }}/${{ inputs.image || env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             "FRAPPE_PATH=${{ inputs.frappe-repo || env.FRAPPE_REPO }}"
             "FRAPPE_BRANCH=${{ inputs.frappe-version || env.FRAPPE_VERSION }}"
             "PYTHON_VERSION=${{ inputs.py-version || env.PY_VERSION }}"
             "NODE_VERSION=${{ inputs.nodejs-version || env.NODEJS_VERSION }}"
             "APPS_JSON_BASE64=${{ inputs.apps-json-base64 || env.APPS_JSON_BASE64 }}"
+          labels: |
+            org.opencontainers.image.created=${{ env.BUILD_DATE }}
+            org.opencontainers.image.revision=${{ env.COMMIT_SHA }}
+            org.opencontainers.image.version=${{ inputs.version || env.VERSION }}
