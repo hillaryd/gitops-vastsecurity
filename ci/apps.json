@@ -14,5 +14,25 @@
     {
       "url": "https://github.com/frappe/webshop",
       "branch": "version-15"
+    },
+    {
+      "url": "https://github.com/frappe/helpdesk",
+      "branch": "main"
+    },
+    {
+      "url": "https://github.com/Commquest-Technologies/Constance.git",
+      "branch": "main"
+    },
+    {
+      "url": "https://github.com/Commquest-Technologies/entropy.git",
+      "branch": "main"
+    },
+        {
+      "url": "https://github.com/rtCamp/next-crm.git",
+      "branch": "main"
+    },
+    {
+      "url": "https://github.com/Commquest-Technologies/syntech_supplier.git",
+      "branch": "main"
     }
   ]
