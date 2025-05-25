@@ -30,9 +30,5 @@
     {
       "url": "https://github.com/rtCamp/next-crm.git",
       "branch": "main"
-    },
-    {
-      "url": "https://github.com/Commquest-Technologies/syntech_supplier.git",
-      "branch": "main"
     }
   ]
