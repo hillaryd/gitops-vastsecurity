@@ -16,6 +16,10 @@
       "branch": "version-15"
     },
     {
+      "url": "https://github.com/frappe/print_designer",
+      "branch": "main"
+    },
+    {
       "url": "https://github.com/Commquest-Technologies/Constance.git",
       "branch": "main"
     },
@@ -25,6 +29,10 @@
     },
     {
       "url": "https://github.com/Commquest-Technologies/vastsec.git",
+      "branch": "main"
+    },
+    {
+      "url": "https://github.com/Commquest-Technologies/ngaaa.git",
       "branch": "main"
     },
     {
