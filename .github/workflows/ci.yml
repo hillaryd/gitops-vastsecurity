@@ -46,6 +46,10 @@ on:
         description: registry password
         required: false
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -64,23 +68,37 @@ jobs:
       - name: Generate version and cache key
         id: version
         run: |
-          # Use timestamp + short commit hash for version
-          VERSION=$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)
+          # Check if required files exist
+          if [ ! -f "./ci/apps.json" ]; then
+            echo "Error: ./ci/apps.json not found"
+            exit 1
+          fi
+          if [ ! -f "./ci/build.env" ]; then
+            echo "Error: ./ci/build.env not found"
+            exit 1
+          fi
+          
+          # Use timestamp with time + short commit hash for unique version
+          VERSION=$(date +'%Y.%m.%d-%H%M')-$(git rev-parse --short HEAD)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_ENV
           echo "COMMIT_SHA=$(git rev-parse HEAD)" >> $GITHUB_ENV
           
-          # Generate cache key based on apps.json content to invalidate cache when apps change
+          # Generate cache key with branch name to avoid conflicts
           APPS_HASH=$(sha256sum ./ci/apps.json | cut -d ' ' -f 1)
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
           echo "APPS_HASH=$APPS_HASH" >> $GITHUB_ENV
+          echo "CACHE_SCOPE=${BRANCH_NAME}-${APPS_HASH}" >> $GITHUB_ENV
           
-          # Update version.txt for future reference
-          echo "$VERSION" > ./ci/version.txt
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git add ./ci/version.txt
-          git commit -m "Update version to $VERSION" || echo "No changes to commit"
-          git push || echo "No changes to push"
+          # Update version.txt for future reference (only on main branch)
+          if [ "$GITHUB_REF" = "refs/heads/main" ] && [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            echo "$VERSION" > ./ci/version.txt
+            git config --global user.name "GitHub Actions"
+            git config --global user.email "actions@github.com"
+            git add ./ci/version.txt
+            git commit -m "Update version to $VERSION" || echo "No changes to commit"
+            git push || echo "Failed to push version update"
+          fi
 
       - name: Source Build Env
         id: source-build-env
@@ -89,17 +107,17 @@ jobs:
           echo "" >> $GITHUB_ENV
           echo "APPS_JSON_BASE64=$(base64 -w 0 ./ci/apps.json)" >> $GITHUB_ENV
 
+      - uses: actions/checkout@v4
+        with:
+          repository: frappe/frappe_docker
+          path: builds
+
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ inputs.registry || env.REGISTRY }}
           username: ${{ inputs.registry-user || github.actor }}
           password: ${{ secrets.REGISTRY_PASSWORD || secrets.GITHUB_TOKEN }}
-
-      - uses: actions/checkout@v4
-        with:
-          repository: frappe/frappe_docker
-          path: builds
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -110,8 +128,8 @@ jobs:
           tags: |
             ${{ inputs.registry || env.REGISTRY }}/${{ env.PROJECT_NAMESPACE || github.repository }}/${{ inputs.image || env.IMAGE }}:${{ inputs.version || env.VERSION }}
             ${{ inputs.registry || env.REGISTRY }}/${{ env.PROJECT_NAMESPACE || github.repository }}/${{ inputs.image || env.IMAGE }}:latest
-          cache-from: type=gha,scope=${{ env.APPS_HASH }}
-          cache-to: type=gha,mode=max,scope=${{ env.APPS_HASH }}
+          cache-from: type=gha,scope=${{ env.CACHE_SCOPE }}
+          cache-to: type=gha,mode=max,scope=${{ env.CACHE_SCOPE }}
           build-args: |
             "FRAPPE_PATH=${{ inputs.frappe-repo || env.FRAPPE_REPO }}"
             "FRAPPE_BRANCH=${{ inputs.frappe-version || env.FRAPPE_VERSION }}"
